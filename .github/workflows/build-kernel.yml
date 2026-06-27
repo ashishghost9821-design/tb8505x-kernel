@@ -16,13 +16,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y bc bison flex libssl-dev make libelf-dev git wget zip
-
-      - name: Download Clang 9.0.3 toolchain
-        run: |
-          mkdir -p clang
-          wget -q https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/android10-release/clang-r353983c.tar.gz -O clang.tar.gz
-          tar -xf clang.tar.gz -C clang
+          sudo apt-get install -y bc bison flex libssl-dev make libelf-dev git wget zip clang-9 gcc-aarch64-linux-gnu
 
       - name: Clone kernel source
         run: |
@@ -46,10 +40,10 @@ jobs:
         run: |
           cd kernel
           make O=out ARCH=arm64 \
-            CC=$(pwd)/../clang/bin/clang \
+            CC=clang-9 \
             CLANG_TRIPLE=aarch64-linux-gnu- \
             CROSS_COMPILE=aarch64-linux-gnu- \
-            -j$(nproc) 2>&1 | tail -50
+            -j$(nproc) 2>&1 | tail -100
 
       - name: Upload Image
         uses: actions/upload-artifact@v3
