@@ -18,7 +18,7 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     timeout-minutes: 120
-    
+
     steps:
     - name: Checkout rtl8188fu driver
       uses: actions/checkout@v4
@@ -29,31 +29,28 @@ jobs:
 
     - name: Install dependencies
       run: |
-        sudo dpkg --add-architecture i386
         sudo apt-get update
         sudo apt-get install -y \
           bc bison build-essential curl flex git \
           libssl-dev libelf-dev python3 python3-pip \
           unzip wget xz-utils \
-          libncurses5-dev libncursesw5-dev \
-          qemu-user-static binfmt-support \
-          gcc-aarch64-linux-gnu
+          libncurses5-dev libncursesw5-dev
 
     - name: Setup Android NDK r21e (Clang 9.0.3)
       run: |
         NDK_URL="https://dl.google.com/android/repository/android-ndk-r21e-linux-x86_64.zip"
         wget -q --show-progress "$NDK_URL" -O ndk.zip
         unzip -q ndk.zip
-        
+
         export NDK_ROOT="$PWD/android-ndk-r21e"
         export PATH="$NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
-        
+
         echo "=== Clang Version ==="
         clang --version
         echo ""
         echo "=== Target Clang ==="
         aarch64-linux-android21-clang --version
-        
+
         echo "NDK_ROOT=$NDK_ROOT" >> $GITHUB_ENV
         echo "PATH=$PATH" >> $GITHUB_ENV
 
@@ -68,8 +65,7 @@ jobs:
     - name: Prepare kernel configuration
       run: |
         cd kernel
-        
-        # Use device config if uploaded, else use defconfig
+
         if [ -f "../config.gz" ]; then
           echo "Using device config.gz..."
           zcat ../config.gz > .config
@@ -77,19 +73,17 @@ jobs:
           echo "Using kernel defconfig..."
           make ARCH=arm64 defconfig
         fi
-        
-        # CRITICAL: Ensure MAC80211 and CFG80211 are built-in
+
         ./scripts/config --enable CONFIG_MAC80211
         ./scripts/config --enable CONFIG_CFG80211
         ./scripts/config --enable CONFIG_WLAN
-        
-        # Disable module signing for out-of-tree modules
+
         ./scripts/config --disable CONFIG_MODULE_SIG
         ./scripts/config --disable CONFIG_MODULE_SIG_FORCE
         ./scripts/config --disable CONFIG_MODULE_SIG_ALL
-        
+
         make ARCH=arm64 olddefconfig
-        
+
         echo "=== MAC80211 ==="
         grep CONFIG_MAC80211 .config
         echo "=== CFG80211 ==="
@@ -98,40 +92,38 @@ jobs:
     - name: Build kernel for Module.symvers
       run: |
         cd kernel
-        
+
         export ARCH=arm64
         export CROSS_COMPILE="$NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android-"
         export CC="clang"
         export CLANG_TRIPLE="aarch64-linux-gnu-"
-        
-        # Prepare headers
+
         make ARCH=arm64 headers_install
         make ARCH=arm64 prepare
-        
-        # CRITICAL: Build kernel to generate Module.symvers
+
         echo "Building kernel to generate Module.symvers..."
         make ARCH=arm64 -j$(nproc) Image.gz modules
-        
+
         if [ ! -f Module.symvers ]; then
           echo "ERROR: Module.symvers not generated!"
           exit 1
         fi
-        
+
         echo "Module.symvers generated: $(wc -l < Module.symvers) symbols"
 
     - name: Build rtl8188fu module
       run: |
         cd rtl8188fu
-        
+
         export ARCH=arm64
         export KSRC="$PWD/../kernel"
         export CROSS_COMPILE="$NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android-"
         export CC="clang"
         export CLANG_TRIPLE="aarch64-linux-gnu-"
         export KVER="${{ github.event.inputs.kernel_version }}"
-        
+
         make -C "$KSRC" M="$PWD" modules V=1
-        
+
         if [ ! -f rtl8188fu.ko ]; then
           echo "ERROR: Build failed!"
           exit 1
@@ -140,18 +132,18 @@ jobs:
     - name: Verify module compatibility
       run: |
         cd rtl8188fu
-        
+
         echo "=== Module Info ==="
         modinfo rtl8188fu.ko
-        
+
         echo ""
         echo "=== VerMagic ==="
         modinfo rtl8188fu.ko | grep vermagic
-        
+
         echo ""
         echo "=== Architecture ==="
         file rtl8188fu.ko
-        
+
         echo ""
         echo "=== Dependencies ==="
         modinfo rtl8188fu.ko | grep depends
@@ -160,11 +152,11 @@ jobs:
       run: |
         mkdir -p artifacts
         cp rtl8188fu/rtl8188fu.ko artifacts/
-        
+
         if [ -f "rtl8188fu/firmware/rtl8188fufw.bin" ]; then
           cp rtl8188fu/firmware/rtl8188fufw.bin artifacts/
         fi
-        
+
         cat > artifacts/install.sh << 'INSTALLEOF'
         #!/system/bin/sh
         echo "Installing rtl8188fu for TB-8505X..."
