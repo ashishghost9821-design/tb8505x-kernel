@@ -16,7 +16,7 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     timeout-minutes: 120
 
     steps:
@@ -54,7 +54,13 @@ jobs:
     - name: Patch kernel for Ubuntu 22.04
       run: |
         cd kernel
-        sed -i 's/YYLTYPE yylloc;/extern YYLTYPE yylloc;/' scripts/dtc/dtc-lexer.l
+        sed -i 's/^YYLTYPE yylloc/extern YYLTYPE yylloc/' scripts/dtc/dtc-lexer.l
+        if [ -f scripts/dtc/dtc-lexer.lex.c ]; then
+          sed -i 's/^YYLTYPE yylloc/extern YYLTYPE yylloc/' scripts/dtc/dtc-lexer.lex.c
+        fi
+        if [ -f drivers/xen/Makefile ]; then
+          sed -i 's/^LDFLAGS +=/LDFLAGS_xen-y +=/' drivers/xen/Makefile
+        fi
         sed -i 's/HOSTCFLAGS   = -Wall/HOSTCFLAGS   = -Wall -fcommon/' Makefile
 
     - name: Prepare kernel config
@@ -69,6 +75,8 @@ jobs:
         ./scripts/config --enable CONFIG_CFG80211
         ./scripts/config --disable CONFIG_MODULE_SIG
         ./scripts/config --disable CONFIG_MODULE_SIG_FORCE
+        ./scripts/config --disable CONFIG_XEN || true
+        ./scripts/config --disable CONFIG_XEN_BACKEND || true
         make ARCH=arm64 olddefconfig
         grep -E "CONFIG_MAC80211|CONFIG_CFG80211" .config
 
@@ -78,7 +86,8 @@ jobs:
         export ARCH=arm64
         export CROSS_COMPILE="$NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android-"
         export CC=clang
-        make ARCH=arm64 headers_install prepare
+        make ARCH=arm64 headers_install
+        make ARCH=arm64 prepare
         make ARCH=arm64 -j$(nproc) Image.gz modules
         ls -la Module.symvers
 
@@ -106,4 +115,3 @@ jobs:
         name: rtl8188fu-tb8505x-${{ github.event.inputs.lenovo_build }}
         path: artifacts/
         retention-days: 90
-
