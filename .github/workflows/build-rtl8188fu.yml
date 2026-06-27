@@ -54,13 +54,13 @@ jobs:
     - name: Patch kernel for Ubuntu 22.04
       run: |
         cd kernel
-        sed -i 's/^YYLTYPE yylloc/extern YYLTYPE yylloc/' scripts/dtc/dtc-lexer.l
-        if [ -f scripts/dtc/dtc-lexer.lex.c ]; then
-          sed -i 's/^YYLTYPE yylloc/extern YYLTYPE yylloc/' scripts/dtc/dtc-lexer.lex.c
-        fi
+        # Fix dtc yylloc - patch ALL files with spaces or no spaces
+        find scripts/dtc -type f \( -name "*.l" -o -name "*.lex.c" -o -name "*.tab.c" -o -name "*.tab.h" \) -exec sed -i 's/YYLTYPE yylloc;/extern YYLTYPE yylloc;/g' {} +
+        # Fix XEN recursive LDFLAGS
         if [ -f drivers/xen/Makefile ]; then
           sed -i 's/^LDFLAGS +=/LDFLAGS_xen-y +=/' drivers/xen/Makefile
         fi
+        # Add -fcommon for host compilation
         sed -i 's/HOSTCFLAGS   = -Wall/HOSTCFLAGS   = -Wall -fcommon/' Makefile
 
     - name: Prepare kernel config
