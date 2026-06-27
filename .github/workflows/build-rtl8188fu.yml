@@ -4,11 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       kernel_version:
-        description: 'Exact kernel version string (e.g., 4.9.190+)'
+        description: 'Exact kernel version string'
         required: true
         default: '4.9.190+'
       lenovo_build:
-        description: 'Lenovo build number (e.g., S300686_220706)'
+        description: 'Lenovo build number'
         required: true
 
 env:
@@ -42,8 +42,6 @@ jobs:
         unzip -q ndk.zip
         echo "NDK_ROOT=$PWD/android-ndk-r21e" >> $GITHUB_ENV
         echo "$PWD/android-ndk-r21e/toolchains/llvm/prebuilt/linux-x86_64/bin" >> $GITHUB_PATH
-
-        # Create gcc symlinks so kernel Makefile finds the compiler
         ln -sf $PWD/android-ndk-r21e/toolchains/llvm/prebuilt/linux-x86_64/bin/clang $PWD/android-ndk-r21e/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android-gcc
         ln -sf $PWD/android-ndk-r21e/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++ $PWD/android-ndk-r21e/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android-g++
 
@@ -53,7 +51,13 @@ jobs:
         unzip -q kernel.zip
         mv tb8505f-kernel-master kernel
 
-    - name: Prepare kernel configuration
+    - name: Patch kernel for Ubuntu 22.04
+      run: |
+        cd kernel
+        sed -i 's/YYLTYPE yylloc;/extern YYLTYPE yylloc;/' scripts/dtc/dtc-lexer.l
+        sed -i 's/HOSTCFLAGS   = -Wall/HOSTCFLAGS   = -Wall -fcommon/' Makefile
+
+    - name: Prepare kernel config
       run: |
         cd kernel
         if [ -f "../config.gz" ]; then
@@ -102,3 +106,4 @@ jobs:
         name: rtl8188fu-tb8505x-${{ github.event.inputs.lenovo_build }}
         path: artifacts/
         retention-days: 90
+
