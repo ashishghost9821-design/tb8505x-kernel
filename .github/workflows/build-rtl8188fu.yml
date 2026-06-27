@@ -45,9 +45,9 @@ jobs:
 
     - name: Download Lenovo kernel source
       run: |
-        wget -q https://github.com/CoderCharmander/tb8505f-kernel/archive/refs/heads/main.zip -O kernel.zip
+        wget -q https://github.com/CoderCharmander/tb8505f-kernel/archive/refs/heads/master.zip -O kernel.zip
         unzip -q kernel.zip
-        mv tb8505f-kernel-main kernel
+        mv tb8505f-kernel-master kernel
 
     - name: Prepare kernel configuration
       run: |
