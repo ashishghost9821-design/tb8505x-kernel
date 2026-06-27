@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout
@@ -16,7 +16,11 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y bc bison flex libssl-dev make libelf-dev git wget zip clang-9 gcc-aarch64-linux-gnu
+          sudo apt-get install -y bc bison flex libssl-dev make libelf-dev git wget zip gcc-aarch64-linux-gnu lsb-release software-properties-common
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 9
+          sudo apt-get install -y clang-9
 
       - name: Clone kernel source
         run: |
