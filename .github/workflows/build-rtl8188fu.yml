@@ -36,146 +36,65 @@ jobs:
           unzip wget xz-utils \
           libncurses5-dev libncursesw5-dev
 
-    - name: Setup Android NDK r21e (Clang 9.0.3)
+    - name: Setup Android NDK r21e
       run: |
-        NDK_URL="https://dl.google.com/android/repository/android-ndk-r21e-linux-x86_64.zip"
-        wget -q --show-progress "$NDK_URL" -O ndk.zip
+        wget -q https://dl.google.com/android/repository/android-ndk-r21e-linux-x86_64.zip -O ndk.zip
         unzip -q ndk.zip
-
-        export NDK_ROOT="$PWD/android-ndk-r21e"
-        export PATH="$NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
-
-        echo "=== Clang Version ==="
-        clang --version
-        echo ""
-        echo "=== Target Clang ==="
-        aarch64-linux-android21-clang --version
-
-        echo "NDK_ROOT=$NDK_ROOT" >> $GITHUB_ENV
-        echo "PATH=$PATH" >> $GITHUB_ENV
+        echo "NDK_ROOT=$PWD/android-ndk-r21e" >> $GITHUB_ENV
+        echo "$PWD/android-ndk-r21e/toolchains/llvm/prebuilt/linux-x86_64/bin" >> $GITHUB_PATH
 
     - name: Download Lenovo kernel source
       run: |
-        KERNEL_REPO="https://github.com/CoderCharmander/tb8505f-kernel/archive/refs/heads/main.zip"
-        wget -q --show-progress "$KERNEL_REPO" -O kernel.zip
+        wget -q https://github.com/CoderCharmander/tb8505f-kernel/archive/refs/heads/main.zip -O kernel.zip
         unzip -q kernel.zip
         mv tb8505f-kernel-main kernel
-        ls -la kernel/
 
     - name: Prepare kernel configuration
       run: |
         cd kernel
-
         if [ -f "../config.gz" ]; then
-          echo "Using device config.gz..."
           zcat ../config.gz > .config
         else
-          echo "Using kernel defconfig..."
           make ARCH=arm64 defconfig
         fi
-
         ./scripts/config --enable CONFIG_MAC80211
         ./scripts/config --enable CONFIG_CFG80211
-        ./scripts/config --enable CONFIG_WLAN
-
         ./scripts/config --disable CONFIG_MODULE_SIG
         ./scripts/config --disable CONFIG_MODULE_SIG_FORCE
-        ./scripts/config --disable CONFIG_MODULE_SIG_ALL
-
         make ARCH=arm64 olddefconfig
-
-        echo "=== MAC80211 ==="
-        grep CONFIG_MAC80211 .config
-        echo "=== CFG80211 ==="
-        grep CONFIG_CFG80211 .config
+        grep -E "CONFIG_MAC80211|CONFIG_CFG80211" .config
 
     - name: Build kernel for Module.symvers
       run: |
         cd kernel
-
         export ARCH=arm64
         export CROSS_COMPILE="$NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android-"
-        export CC="clang"
-        export CLANG_TRIPLE="aarch64-linux-gnu-"
-
-        make ARCH=arm64 headers_install
-        make ARCH=arm64 prepare
-
-        echo "Building kernel to generate Module.symvers..."
+        export CC=clang
+        make ARCH=arm64 headers_install prepare
         make ARCH=arm64 -j$(nproc) Image.gz modules
-
-        if [ ! -f Module.symvers ]; then
-          echo "ERROR: Module.symvers not generated!"
-          exit 1
-        fi
-
-        echo "Module.symvers generated: $(wc -l < Module.symvers) symbols"
+        ls -la Module.symvers
 
     - name: Build rtl8188fu module
       run: |
         cd rtl8188fu
-
         export ARCH=arm64
         export KSRC="$PWD/../kernel"
         export CROSS_COMPILE="$NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android-"
-        export CC="clang"
-        export CLANG_TRIPLE="aarch64-linux-gnu-"
-        export KVER="${{ github.event.inputs.kernel_version }}"
+        export CC=clang
+        make -C "$KSRC" M="$PWD" modules
 
-        make -C "$KSRC" M="$PWD" modules V=1
-
-        if [ ! -f rtl8188fu.ko ]; then
-          echo "ERROR: Build failed!"
-          exit 1
-        fi
-
-    - name: Verify module compatibility
+    - name: Verify and package
       run: |
         cd rtl8188fu
-
-        echo "=== Module Info ==="
-        modinfo rtl8188fu.ko
-
-        echo ""
-        echo "=== VerMagic ==="
         modinfo rtl8188fu.ko | grep vermagic
-
-        echo ""
-        echo "=== Architecture ==="
         file rtl8188fu.ko
-
-        echo ""
-        echo "=== Dependencies ==="
-        modinfo rtl8188fu.ko | grep depends
-
-    - name: Prepare artifacts
-      run: |
-        mkdir -p artifacts
-        cp rtl8188fu/rtl8188fu.ko artifacts/
-
-        if [ -f "rtl8188fu/firmware/rtl8188fufw.bin" ]; then
-          cp rtl8188fu/firmware/rtl8188fufw.bin artifacts/
-        fi
-
-        cat > artifacts/install.sh << 'INSTALLEOF'
-        #!/system/bin/sh
-        echo "Installing rtl8188fu for TB-8505X..."
-        mkdir -p /data/adb/modules/rtl8188fu
-        cp rtl8188fu.ko /data/adb/modules/rtl8188fu/
-        mkdir -p /data/adb/modules/rtl8188fu/system/lib/firmware/rtlwifi
-        cp rtl8188fufw.bin /data/adb/modules/rtl8188fu/system/lib/firmware/rtlwifi/
-        cat > /data/adb/modules/rtl8188fu/service.sh << 'INNEREOF'
-        #!/system/bin/sh
-        insmod /data/adb/modules/rtl8188fu/rtl8188fu.ko
-        INNEREOF
-        chmod +x /data/adb/modules/rtl8188fu/service.sh
-        echo "Done. Reboot to activate."
-        INSTALLEOF
-        chmod +x artifacts/install.sh
+        mkdir -p $PWD/../artifacts
+        cp rtl8188fu.ko $PWD/../artifacts/
+        cp firmware/rtl8188fufw.bin $PWD/../artifacts/ 2>/dev/null || true
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: rtl8188fu-tb8505x-${{ github.event.inputs.lenovo_build }}-${{ github.event.inputs.kernel_version }}
+        name: rtl8188fu-tb8505x-${{ github.event.inputs.lenovo_build }}
         path: artifacts/
         retention-days: 90
